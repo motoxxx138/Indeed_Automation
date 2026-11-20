@@ -71,12 +71,17 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-6">
 
         <!-- Banner Alert / Task Running Bar -->
-        <div id="taskBanner" class="hidden bg-blue-600 text-white px-4 py-3 rounded-xl shadow-md flex items-center justify-between animate-pulse">
+        <div id="taskBanner" class="hidden bg-blue-600 text-white px-4 py-3 rounded-xl shadow-md flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <i class="fa-solid fa-circle-notch fa-spin text-lg"></i>
                 <span id="taskBannerText" class="font-medium text-sm">Processing task...</span>
             </div>
-            <span class="text-xs bg-blue-700 px-2.5 py-1 rounded-full">Background Worker</span>
+            <div class="flex items-center gap-2">
+                <span class="text-xs bg-blue-700 px-2.5 py-1 rounded-full">Background Worker</span>
+                <button type="button" onclick="forceResetTask()" title="Reset stuck task to Idle" class="text-xs bg-blue-800 hover:bg-red-600 px-2.5 py-1 rounded-md transition-colors flex items-center gap-1">
+                    <i class="fa-solid fa-rotate-left"></i> Reset Task
+                </button>
+            </div>
         </div>
 
         <!-- Missing Resumes Detected Alert Banner -->
@@ -626,7 +631,17 @@
             return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
-        async function handleLiveSearch(e, forceVisible = false) {
+        async function forceResetTask() {
+            try {
+                await fetch('/api/reset_task', { method: 'POST' });
+                setTaskBanner(false);
+                loadJobs();
+            } catch (e) {
+                console.error("Reset task error:", e);
+            }
+        }
+
+        async function handleLiveSearch(e, forceVisible = false, force = false) {
             if (e) e.preventDefault();
             const query = (document.getElementById('live_query').value || '').trim();
             const location = (document.getElementById('live_location').value || '').trim();
@@ -649,17 +664,26 @@
                         query: query,
                         location: location,
                         clear_existing: clearExisting,
-                        visible: isVisible
+                        visible: isVisible,
+                        force: force
                     })
                 });
                 if (!res.ok) {
-                    const errText = await res.text();
-                    throw new Error(errText || `Server error (${res.status})`);
+                    const data = await res.json().catch(() => ({}));
+                    if (res.status === 400 && data.status === 'busy') {
+                        if (confirm(`A previous task is currently active:\n"${data.message || data.current_task}"\n\nWould you like to cancel/reset it and run your search now?`)) {
+                            await forceResetTask();
+                            return handleLiveSearch(null, forceVisible, true);
+                        }
+                        setTaskBanner(false);
+                        return;
+                    }
+                    throw new Error(data.message || `Server error (${res.status})`);
                 }
                 const data = await res.json();
                 pollTaskStatus();
             } catch (err) {
-                alert("Search error: " + err);
+                alert("Search error: " + err.message);
                 setTaskBanner(false);
             }
         }
@@ -697,7 +721,7 @@
         }
 
         // Actions
-        async function triggerScan() {
+        async function triggerScan(force = false) {
             const query = (document.getElementById('live_query')?.value || '').trim();
             const location = (document.getElementById('live_location')?.value || '').trim();
             const clearExisting = document.getElementById('chk_clear_on_search')?.checked || false;
@@ -712,17 +736,26 @@
                         query: query,
                         location: location,
                         clear_existing: clearExisting,
-                        visible: isVisible
+                        visible: isVisible,
+                        force: force
                     })
                 });
                 if (!res.ok) {
-                    const errText = await res.text();
-                    throw new Error(errText || `Server error (${res.status})`);
+                    const data = await res.json().catch(() => ({}));
+                    if (res.status === 400 && data.status === 'busy') {
+                        if (confirm(`A previous task is currently active:\n"${data.message || data.current_task}"\n\nWould you like to cancel/reset it and run your search now?`)) {
+                            await forceResetTask();
+                            return triggerScan(true);
+                        }
+                        setTaskBanner(false);
+                        return;
+                    }
+                    throw new Error(data.message || `Server error (${res.status})`);
                 }
                 const data = await res.json();
                 pollTaskStatus();
             } catch (err) {
-                alert("Scan failed: " + err);
+                alert("Scan failed: " + err.message);
                 setTaskBanner(false);
             }
         }

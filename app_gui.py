@@ -91,12 +91,29 @@ def get_task_status():
     with task_lock:
         return jsonify(task_state)
 
+@app.route("/api/reset_task", methods=["POST"])
+def api_reset_task():
+    """Force-resets the task status to Idle so the UI is never stuck."""
+    set_task(False, "Idle", None)
+    return jsonify({"status": "ok", "message": "Task status has been reset."})
+
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
-    if task_state["running"]:
-        return jsonify({"status": "busy", "message": "Another task is already in progress."}), 400
-
     data = request.get_json(silent=True) or {}
+    force = bool(data.get("force", False))
+
+    if task_state["running"] and not force:
+        # If it's just an open helper or stale, clear it
+        curr = task_state.get("current_task", "")
+        if "Opening" in curr or "login" in curr.lower() or "window" in curr.lower():
+            set_task(False, "Idle")
+        else:
+            return jsonify({
+                "status": "busy",
+                "message": f"Another task is currently running: '{curr}'.",
+                "current_task": curr
+            }), 400
+
     query = (data.get("query") or "").strip() or config.JOB_SEARCH_QUERY
     location = (data.get("location") or "").strip() or config.JOB_LOCATION
     clear_existing = bool(data.get("clear_existing", False))
@@ -135,12 +152,13 @@ def api_open_search_browser():
 
     def worker():
         b_name = config.BROWSER_TYPE.capitalize()
-        set_task(True, f"Opening {b_name} for Indeed security check...")
+        set_task(False, f"Opening {b_name} for Indeed security check...")
         try:
             with sync_playwright() as p:
                 context = launch_sync_context(p, headless=False)
                 page = context.pages[0] if context.pages else context.new_page()
                 page.goto(search_url)
+                set_task(False, "Verification window is open. Complete check, then close window.")
                 while len(context.pages) > 0:
                     try:
                         time.sleep(1)
@@ -289,12 +307,13 @@ def api_open_file(job_id):
 def api_login():
     def worker():
         b_name = config.BROWSER_TYPE.capitalize()
-        set_task(True, f"Opening {b_name} for Indeed login...")
+        set_task(False, f"Opening {b_name} for Indeed login...")
         try:
             with sync_playwright() as p:
                 context = launch_sync_context(p, headless=False)
                 page = context.pages[0] if context.pages else context.new_page()
                 page.goto("https://secure.indeed.com/auth")
+                set_task(False, f"{b_name} login window is open. You may log in.")
                 # Wait for user to interact or close
                 while len(context.pages) > 0:
                     try:
@@ -306,7 +325,7 @@ def api_login():
         except Exception as e:
             print("Login browser closed:", e)
         finally:
-            set_task(False, "Login completed.")
+            set_task(False, "Idle")
 
     threading.Thread(target=worker, daemon=True).start()
     return jsonify({"status": "started", "message": f"Opening {config.BROWSER_TYPE.capitalize()} for Indeed sign-in."})
