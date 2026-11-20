@@ -3,6 +3,15 @@ from pathlib import Path
 from typing import Optional, Tuple
 from config import BROWSER_TYPE, FIREFOX_PROFILE_DIR, CHROMIUM_PROFILE_DIR
 
+def cleanup_stale_firefox_locks(profile_dir: Path):
+    """Safely removes stale parent.lock if lingering from an interrupted process."""
+    lock_file = profile_dir / "parent.lock"
+    if lock_file.exists():
+        try:
+            lock_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+
 def get_browser_settings(browser_type: Optional[str] = None) -> Tuple[str, Path]:
     """Returns the browser engine name ('firefox' or 'chromium') and profile path."""
     b_type = (browser_type or BROWSER_TYPE or "firefox").lower().strip()
@@ -11,6 +20,7 @@ def get_browser_settings(browser_type: Optional[str] = None) -> Tuple[str, Path]
 
     if b_type == "firefox":
         profile_dir = FIREFOX_PROFILE_DIR
+        cleanup_stale_firefox_locks(profile_dir)
     else:
         profile_dir = CHROMIUM_PROFILE_DIR
 

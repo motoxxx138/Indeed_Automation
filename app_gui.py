@@ -100,27 +100,61 @@ def api_scan():
     query = (data.get("query") or "").strip() or config.JOB_SEARCH_QUERY
     location = (data.get("location") or "").strip() or config.JOB_LOCATION
     clear_existing = bool(data.get("clear_existing", False))
+    visible = bool(data.get("visible", False))
 
     # Update in-memory config
     config.JOB_SEARCH_QUERY = query
     config.JOB_LOCATION = location
 
     def worker():
+        mode_text = " (Visible Browser)" if visible else ""
         if clear_existing:
             from database import clear_all_jobs
             clear_all_jobs()
-            set_task(True, f"Cleared previous jobs. Scanning Indeed for '{query}' in '{location}'...")
+            set_task(True, f"Cleared previous jobs. Scanning Indeed{mode_text} for '{query}' in '{location}'...")
         else:
-            set_task(True, f"Scanning Indeed for '{query}' in '{location}'...")
+            set_task(True, f"Scanning Indeed{mode_text} for '{query}' in '{location}'...")
 
         try:
-            run_scraper(query=query, location=location, max_jobs=15)
+            run_scraper(query=query, location=location, max_jobs=15, headless=not visible)
             set_task(False, "Scan completed.")
         except Exception as e:
             set_task(False, "Scan failed", str(e))
 
     threading.Thread(target=worker, daemon=True).start()
     return jsonify({"status": "started", "message": f"Scanning for '{query}' in '{location}'."})
+
+@app.route("/api/open_search_browser", methods=["POST"])
+def api_open_search_browser():
+    """Opens visible browser directly to Indeed search so user can complete any Cloudflare challenge."""
+    import urllib.parse
+    data = request.get_json(silent=True) or {}
+    q = urllib.parse.quote_plus((data.get("query") or config.JOB_SEARCH_QUERY).strip())
+    l = urllib.parse.quote_plus((data.get("location") or config.JOB_LOCATION).strip())
+    search_url = f"https://www.indeed.com/jobs?q={q}&l={l}"
+
+    def worker():
+        b_name = config.BROWSER_TYPE.capitalize()
+        set_task(True, f"Opening {b_name} for Indeed security check...")
+        try:
+            with sync_playwright() as p:
+                context = launch_sync_context(p, headless=False)
+                page = context.pages[0] if context.pages else context.new_page()
+                page.goto(search_url)
+                while len(context.pages) > 0:
+                    try:
+                        time.sleep(1)
+                        if not context.pages:
+                            break
+                    except Exception:
+                        break
+        except Exception as e:
+            print("Search browser error:", e)
+        finally:
+            set_task(False, "Verification window closed. Clearance saved to profile.")
+
+    threading.Thread(target=worker, daemon=True).start()
+    return jsonify({"status": "started", "message": "Opening verification browser window."})
 
 @app.route("/api/delete_job/<int:job_id>", methods=["POST"])
 def api_delete_job(job_id):

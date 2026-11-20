@@ -61,9 +61,60 @@ async def scrape_indeed_jobs(
             await context.close()
             return []
 
-        # Find job cards
-        cards = await page.query_selector_all("div.job_seen_beacon")
-        print(f"[SCRAPER] Found {len(cards)} job cards on current search page.")
+        # Check if Indeed is presenting Cloudflare Turnstile or security challenge
+        page_title = await page.title()
+        content = await page.content()
+        is_blocked = (
+            "security check" in page_title.lower()
+            or "just a moment" in page_title.lower()
+            or "additional verification required" in content.lower()
+            or ("cloudflare" in content.lower() and "ray id" in content.lower())
+        )
+
+        if is_blocked:
+            if headless:
+                msg = (
+                    "Indeed displayed a security verification check ('Additional Verification Required'). "
+                    "Cloudflare requires human verification. Click 'Search (Visible Browser)' to complete the check directly in your browser."
+                )
+                print(f"[SCRAPER] {msg}")
+                await context.close()
+                raise RuntimeError(msg)
+            else:
+                print("[SCRAPER] Security verification challenge displayed. Waiting up to 60s for you to complete it in the browser...")
+                try:
+                    await page.wait_for_selector("div.job_seen_beacon, [data-jk], a.jcs-JobTitle", timeout=60000)
+                    await page.wait_for_timeout(2000)
+                except Exception:
+                    await context.close()
+                    raise RuntimeError("Verification check was not completed within 60 seconds. Please try again.")
+
+        # Find job cards using primary and fallback selectors
+        raw_cards = await page.query_selector_all("div.job_seen_beacon, div[class*='cardOutline'], [data-jk]")
+        print(f"[SCRAPER] Detected {len(raw_cards)} raw card elements on page.")
+
+        # Deduplicate and extract valid cards
+        unique_cards = []
+        seen_card_keys = set()
+        for c in raw_cards:
+            c_jk = await c.get_attribute("data-jk")
+            link_el = None
+            if not c_jk:
+                link_el = await c.query_selector("a[data-jk], a.jcs-JobTitle, a[href*='jk=']")
+                if link_el:
+                    c_jk = await link_el.get_attribute("data-jk")
+                    if not c_jk:
+                        h = await link_el.get_attribute("href") or ""
+                        if "jk=" in h:
+                            c_jk = h.split("jk=")[1].split("&")[0]
+            else:
+                link_el = await c.query_selector("a[data-jk], a.jcs-JobTitle") or c
+
+            if c_jk and c_jk not in seen_card_keys:
+                seen_card_keys.add(c_jk)
+                unique_cards.append((c, link_el, c_jk))
+
+        print(f"[SCRAPER] Found {len(unique_cards)} unique job postings on current search page.")
 
         # Check existing jobs in database to avoid unnecessary clicks
         conn = get_connection()
@@ -72,20 +123,10 @@ async def scrape_indeed_jobs(
         existing_keys = {row[0] for row in cursor.fetchall()}
         conn.close()
 
-        for idx, card in enumerate(cards[:max_jobs]):
+        for idx, (card, link_el, jk) in enumerate(unique_cards[:max_jobs]):
             try:
-                link_el = await card.query_selector("a[data-jk], a.jcs-JobTitle")
-                if not link_el:
-                    continue
-
-                jk = await link_el.get_attribute("data-jk")
-                if not jk:
-                    href = await link_el.get_attribute("href") or ""
-                    if "jk=" in href:
-                        jk = href.split("jk=")[1].split("&")[0]
-
-                if not jk or jk in existing_keys:
-                    continue  # Already processed
+                if not link_el or not jk or jk in existing_keys:
+                    continue  # Already processed or missing link
 
                 # Get title & company from card as baseline
                 title_el = await card.query_selector("h2.jobTitle, a.jcs-JobTitle")
@@ -100,8 +141,11 @@ async def scrape_indeed_jobs(
                 print(f"[SCRAPER] Found new job [{jk}]: {title} at {company} (EasyApply: {is_easy})")
 
                 # Click the card to trigger GraphQL description load
-                await link_el.click()
-                await page.wait_for_timeout(2000)
+                try:
+                    await link_el.click()
+                    await page.wait_for_timeout(2000)
+                except Exception:
+                    pass
 
                 # Check if we captured description from GraphQL
                 full_description = ""
@@ -170,11 +214,11 @@ async def scrape_indeed_jobs(
     print(f"[SCRAPER] Completed scan. {len(new_jobs_found)} new jobs stored in database.")
     return new_jobs_found
 
-def run_scraper(query: Optional[str] = None, location: Optional[str] = None, max_jobs: int = 15):
+def run_scraper(query: Optional[str] = None, location: Optional[str] = None, max_jobs: int = 15, headless: bool = True):
     """Synchronous wrapper for scrape_indeed_jobs."""
     active_query = query if query is not None else config.JOB_SEARCH_QUERY
     active_location = location if location is not None else config.JOB_LOCATION
-    return asyncio.run(scrape_indeed_jobs(active_query, active_location, max_jobs))
+    return asyncio.run(scrape_indeed_jobs(active_query, active_location, max_jobs, headless=headless))
 
 if __name__ == "__main__":
     jobs = run_scraper()
