@@ -632,6 +632,11 @@
                         clear_existing: clearExisting
                     })
                 });
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(errText || `Server error (${res.status})`);
+                }
+                const data = await res.json();
                 pollTaskStatus();
             } catch (err) {
                 alert("Search error: " + err);
@@ -673,9 +678,25 @@
 
         // Actions
         async function triggerScan() {
-            setTaskBanner(true, "Scanning Indeed for remote customer service jobs...");
+            const query = (document.getElementById('live_query')?.value || '').trim();
+            const location = (document.getElementById('live_location')?.value || '').trim();
+            const clearExisting = document.getElementById('chk_clear_on_search')?.checked || false;
+
+            setTaskBanner(true, `Scanning Indeed${query ? ` for "${query}"` : ''}...`);
             try {
-                const res = await fetch('/api/scan', { method: 'POST' });
+                const res = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: query,
+                        location: location,
+                        clear_existing: clearExisting
+                    })
+                });
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(errText || `Server error (${res.status})`);
+                }
                 const data = await res.json();
                 pollTaskStatus();
             } catch (err) {

@@ -96,7 +96,7 @@ def api_scan():
     if task_state["running"]:
         return jsonify({"status": "busy", "message": "Another task is already in progress."}), 400
 
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     query = (data.get("query") or "").strip() or config.JOB_SEARCH_QUERY
     location = (data.get("location") or "").strip() or config.JOB_LOCATION
     clear_existing = bool(data.get("clear_existing", False))
@@ -139,7 +139,7 @@ def api_tailor_all():
     if task_state["running"]:
         return jsonify({"status": "busy", "message": "Another task is already in progress."}), 400
 
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     include_missing = data.get("include_missing", True)
 
     def worker():
@@ -299,7 +299,7 @@ def get_settings():
 
 @app.route("/api/settings", methods=["POST"])
 def save_settings():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     env_path = config.BASE_DIR / ".env"
 
     # Update in-memory
