@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indeed Job Automation Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#eff6ff', 500: '#2563eb', 600: '#1d4ed8', 700: '#1e40af' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .badge-new { background-color: #fef3c7; color: #92400e; }
+        .badge-tailored { background-color: #dbeafe; color: #1e40af; }
+        .badge-applied { background-color: #d1fae5; color: #065f46; }
+        .badge-skipped { background-color: #f3f4f6; color: #374151; }
+        .badge-error { background-color: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
+
+    <!-- Top Navigation -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white text-xl font-bold shadow-md shadow-blue-200">
+                    <i class="fa-solid fa-briefcase"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 leading-tight">Indeed Job Monitor & AI Tailor</h1>
+                    <p class="text-xs text-slate-500">Autonomous Remote Customer Service Pipeline</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3">
+                <!-- Status indicator -->
+                <div id="statusBadge" class="hidden sm:flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
+                    <span id="statusText">System Ready</span>
+                </div>
+
+                <button onclick="openSettingsModal()" class="px-3.5 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-2">
+                    <i class="fa-solid fa-gear"></i>
+                    <span>Settings</span>
+                </button>
+
+                <button onclick="triggerIndeedLogin()" title="Opens Firefox with your automation profile so your login is saved for applications" class="px-3.5 py-2 text-sm font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors flex items-center gap-2">
+                    <i class="fa-brands fa-firefox-browser text-amber-600 text-base"></i>
+                    <span>Indeed Login (Firefox)</span>
+                </button>
+
+                <button onclick="openDefaultBrowserLogin()" title="Open Indeed sign-in directly in your regular default desktop browser" class="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                    <span class="hidden md:inline">Default Browser</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-6">
+
+        <!-- Banner Alert / Task Running Bar -->
+        <div id="taskBanner" class="hidden bg-blue-600 text-white px-4 py-3 rounded-xl shadow-md flex items-center justify-between animate-pulse">
+            <div class="flex items-center space-x-3">
+                <i class="fa-solid fa-circle-notch fa-spin text-lg"></i>
+                <span id="taskBannerText" class="font-medium text-sm">Processing task...</span>
+            </div>
+            <span class="text-xs bg-blue-700 px-2.5 py-1 rounded-full">Background Worker</span>
+        </div>
+
+        <!-- Missing Resumes Detected Alert Banner -->
+        <div id="missingBanner" class="hidden bg-amber-50 border-l-4 border-amber-500 p-4 rounded-xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 text-lg flex-shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-amber-900"><span id="missingBannerCount">0</span> tailored resume(s) missing from output folder</h3>
+                    <p class="text-xs text-amber-700">The resume files were deleted from disk. Would you like to regenerate them with AI?</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2 flex-shrink-0">
+                <button onclick="confirmRegenerateMissing()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all">
+                    <i class="fa-solid fa-arrows-rotate"></i> Regenerate Missing Resumes
+                </button>
+                <button onclick="dismissMissingBanner()" class="text-amber-600 hover:text-amber-800 p-2 text-base font-bold">&times;</button>
+            </div>
+        </div>
+
+        <!-- Metrics Row -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                <span class="text-xs font-semibold uppercase text-slate-400">Total Tracked</span>
+                <span id="statTotal" class="text-2xl font-bold text-slate-900 mt-1">0</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                <span class="text-xs font-semibold uppercase text-amber-600">Needs Tailoring</span>
+                <span id="statNew" class="text-2xl font-bold text-amber-600 mt-1">0</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                <span class="text-xs font-semibold uppercase text-blue-600">Ready to Apply</span>
+                <span id="statTailored" class="text-2xl font-bold text-blue-600 mt-1">0</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                <span class="text-xs font-semibold uppercase text-emerald-600">Submitted</span>
+                <span id="statApplied" class="text-2xl font-bold text-emerald-600 mt-1">0</span>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                <span class="text-xs font-semibold uppercase text-slate-500">Skipped</span>
+                <span id="statSkipped" class="text-2xl font-bold text-slate-600 mt-1">0</span>
+            </div>
+        </div>
+
+        <!-- Live Search & Location Bar -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <i class="fa-solid fa-crosshairs text-blue-600"></i> Indeed Search Parameters
+                </span>
+                <span id="currentSearchDisplay" class="text-xs font-medium text-slate-500">Active Query: Loading...</span>
+            </div>
+            <form onsubmit="handleLiveSearch(event)" class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                <div class="sm:col-span-5 relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                    <input type="text" id="live_query" placeholder="e.g. remote customer service, call center, support" class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="sm:col-span-3 relative">
+                    <i class="fa-solid fa-location-dot absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                    <input type="text" id="live_location" placeholder="e.g. remote, Austin, TX, United States" class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="sm:col-span-4 flex items-center gap-2">
+                    <button type="submit" id="btnLiveSearch" class="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm flex items-center justify-center gap-2 transition-all">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <span>Search Indeed</span>
+                    </button>
+                    <button type="button" onclick="confirmClearAll()" title="Clear old job results from table" class="px-3.5 py-2.5 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 border border-slate-200 rounded-lg text-sm transition-colors flex items-center gap-1.5 flex-shrink-0">
+                        <i class="fa-regular fa-trash-can"></i>
+                        <span class="hidden lg:inline text-xs font-medium">Clear List</span>
+                    </button>
+                </div>
+            </form>
+            <div class="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" id="chk_clear_on_search" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                    <span>Clear previous jobs when searching a new query</span>
+                </label>
+                <span class="text-slate-400">Press Search to fetch live postings matching your updated terms</span>
+            </div>
+        </div>
+
+        <!-- Action & Filter Bar -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <!-- Left: Primary Action Buttons -->
+            <div class="flex flex-wrap items-center gap-3">
+                <button id="btnScan" onclick="triggerScan()" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-all">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <span>Scan Indeed for Jobs</span>
+                </button>
+
+                <button id="btnTailorAll" onclick="triggerTailorAll()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-all">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Tailor All Pending Resumes</span>
+                </button>
+            </div>
+
+            <!-- Right: Filter Tabs -->
+            <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs font-medium text-slate-600 overflow-x-auto">
+                <button onclick="setFilter('all')" id="tab-all" class="px-3 py-1.5 rounded-md bg-white text-slate-900 shadow-sm">All</button>
+                <button onclick="setFilter('new')" id="tab-new" class="px-3 py-1.5 rounded-md hover:text-slate-900">New</button>
+                <button onclick="setFilter('tailored')" id="tab-tailored" class="px-3 py-1.5 rounded-md hover:text-slate-900">Ready to Apply</button>
+                <button onclick="setFilter('applied')" id="tab-applied" class="px-3 py-1.5 rounded-md hover:text-slate-900">Applied</button>
+                <button onclick="setFilter('skipped')" id="tab-skipped" class="px-3 py-1.5 rounded-md hover:text-slate-900">Skipped</button>
+            </div>
+        </div>
+
+        <!-- Jobs Table Card -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h2 class="font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-list-check text-slate-400"></i>
+                    <span>Job Applications Queue</span>
+                </h2>
+                <button onclick="loadJobs()" class="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                    <i class="fa-solid fa-arrow-rotate-right"></i> Refresh Table
+                </button>
+            </div>
+
+            <!-- Table -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-slate-50 text-slate-500 uppercase text-xs border-b border-slate-100">
+                        <tr>
+                            <th class="px-6 py-3.5 font-semibold">ID</th>
+                            <th class="px-6 py-3.5 font-semibold">Job Details</th>
+                            <th class="px-6 py-3.5 font-semibold">Company & Location</th>
+                            <th class="px-6 py-3.5 font-semibold">Status</th>
+                            <th class="px-6 py-3.5 font-semibold text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobsTableBody" class="divide-y divide-slate-100">
+                        <!-- Loaded dynamically via JS -->
+                        <tr>
+                            <td colspan="5" class="px-6 py-12 text-center text-slate-400">
+                                <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                                <p>Loading job postings...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
+        Indeed Automation Platform &bull; Powered by OpenRouter AI &bull; Playwright Engine
+    </footer>
+
+    <!-- Job Details / Resume Preview Modal -->
+    <div id="detailsModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center space-x-2">
+                    <span id="modalJobBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold badge-tailored">TAILORED</span>
+                    <h3 id="modalJobTitle" class="font-bold text-slate-900 text-lg">Job Title</h3>
+                </div>
+                <button onclick="closeDetailsModal()" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+            </div>
+
+            <div class="space-y-3 text-sm">
+                <div>
+                    <span class="text-xs uppercase font-semibold text-slate-400 block">Employer & Location</span>
+                    <p id="modalCompany" class="font-medium text-slate-800">Company Name - Remote</p>
+                </div>
+
+                <div id="modalTailorNotesContainer">
+                    <span class="text-xs uppercase font-semibold text-purple-600 block">AI Tailoring Rationale</span>
+                    <div id="modalTailorNotes" class="bg-purple-50 text-purple-900 p-3 rounded-xl border border-purple-100 text-xs mt-1">
+                        Notes here...
+                    </div>
+                </div>
+
+                <div id="modalSummaryContainer">
+                    <span class="text-xs uppercase font-semibold text-blue-600 block">Optimized Professional Summary</span>
+                    <div id="modalSummary" class="bg-slate-50 text-slate-700 p-3 rounded-xl border border-slate-200 text-xs italic mt-1 leading-relaxed">
+                        Summary here...
+                    </div>
+                </div>
+
+                <div>
+                    <span class="text-xs uppercase font-semibold text-slate-400 block">Full Job Posting Text</span>
+                    <div id="modalJobDesc" class="bg-slate-50 text-slate-600 p-3 rounded-xl border border-slate-200 text-xs max-h-48 overflow-y-auto mt-1 whitespace-pre-wrap leading-relaxed">
+                        Job description text...
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button onclick="closeDetailsModal()" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Close</button>
+                <button id="modalOpenWordBtn" onclick="openResumeFile(currentViewingJobId)" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg flex items-center gap-2">
+                    <i class="fa-solid fa-file-word"></i> Open Resume in Word
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-900 text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-blue-600"></i> Settings & Profile
+                </h3>
+                <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+            </div>
+
+            <form id="settingsForm" onsubmit="saveSettings(event)" class="space-y-4 text-sm">
+                <!-- OpenRouter Configuration -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <h4 class="font-bold text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-brain text-purple-600"></i> OpenRouter AI Configuration
+                    </h4>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">OpenRouter API Key</label>
+                        <input type="password" id="cfg_api_key" placeholder="sk-or-v1-..." class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Model Slug</label>
+                        <input type="text" id="cfg_model" value="google/gemini-2.5-flash" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <span class="text-[11px] text-slate-400">e.g. google/gemini-2.5-flash, anthropic/claude-3.5-sonnet, openai/gpt-4o-mini</span>
+                    </div>
+                </div>
+
+                <!-- Browser Engine Configuration -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <h4 class="font-bold text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-globe text-indigo-600"></i> Browser Engine
+                    </h4>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">Browser for Automation & Login</label>
+                        <select id="cfg_browser" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="firefox">Mozilla Firefox (Recommended)</option>
+                            <option value="chromium">Chromium</option>
+                        </select>
+                        <span class="text-[11px] text-slate-400">Firefox launches your installed Firefox without test-browser flags.</span>
+                    </div>
+                </div>
+
+                <!-- Job Search Settings -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <h4 class="font-bold text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-magnifying-glass text-blue-600"></i> Job Search Query
+                    </h4>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Keywords</label>
+                            <input type="text" id="cfg_query" value="remote customer service" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Location</label>
+                            <input type="text" id="cfg_loc" value="remote" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Profile Information -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <h4 class="font-bold text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-check text-emerald-600"></i> Candidate Screening Profile
+                    </h4>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Full Name</label>
+                            <input type="text" id="cfg_name" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Email</label>
+                            <input type="email" id="cfg_email" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Phone</label>
+                            <input type="text" id="cfg_phone" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Years of Exp</label>
+                            <input type="number" id="cfg_exp" value="5" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+                    <button type="button" onclick="closeSettingsModal()" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                    <button type="submit" class="px-5 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JavaScript Controller -->
+    <script>
+        let allJobs = [];
+        let currentFilter = 'all';
+        let currentViewingJobId = null;
+        let isTaskRunning = false;
+        let globalStats = {};
+        let hasInitializedSearchInputs = false;
+
+        async function loadJobs() {
+            try {
+                const res = await fetch('/api/jobs');
+                const data = await res.json();
+                allJobs = data.jobs || [];
+                updateStats(data.stats || {});
+                renderTable();
+
+                if (!hasInitializedSearchInputs) {
+                    const sRes = await fetch('/api/settings');
+                    const s = await sRes.json();
+                    const q = s.job_search_query || 'remote customer service';
+                    const loc = s.job_location || 'remote';
+                    document.getElementById('live_query').value = q;
+                    document.getElementById('live_location').value = loc;
+                    document.getElementById('currentSearchDisplay').innerText = `Active: ${q} • ${loc}`;
+                    hasInitializedSearchInputs = true;
+                }
+            } catch (err) {
+                console.error("Error loading jobs:", err);
+            }
+        }
+
+        function updateStats(stats) {
+            globalStats = stats;
+            document.getElementById('statTotal').innerText = stats.total || 0;
+            document.getElementById('statNew').innerText = stats.new || 0;
+            document.getElementById('statTailored').innerText = stats.tailored || 0;
+            document.getElementById('statApplied').innerText = stats.applied || 0;
+            document.getElementById('statSkipped').innerText = stats.skipped || 0;
+
+            const missingBanner = document.getElementById('missingBanner');
+            if (stats.missing && stats.missing > 0) {
+                document.getElementById('missingBannerCount').innerText = stats.missing;
+                missingBanner.classList.remove('hidden');
+            } else {
+                missingBanner.classList.add('hidden');
+            }
+        }
+
+        function dismissMissingBanner() {
+            document.getElementById('missingBanner').classList.add('hidden');
+        }
+
+        async function confirmRegenerateMissing() {
+            const count = globalStats.missing || 0;
+            if (confirm(`Do you want to regenerate all ${count} missing resume(s) with AI now?`)) {
+                setTaskBanner(true, `Regenerating ${count} missing resume(s) with AI...`);
+                try {
+                    await fetch('/api/regenerate_missing', { method: 'POST' });
+                    pollTaskStatus();
+                } catch (err) {
+                    alert("Regeneration error: " + err);
+                    setTaskBanner(false);
+                }
+            }
+        }
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            ['all', 'new', 'tailored', 'applied', 'skipped'].forEach(f => {
+                const tab = document.getElementById(`tab-${f}`);
+                if (f === filter) {
+                    tab.className = "px-3 py-1.5 rounded-md bg-white text-slate-900 shadow-sm font-semibold";
+                } else {
+                    tab.className = "px-3 py-1.5 rounded-md hover:text-slate-900";
+                }
+            });
+            renderTable();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('jobsTableBody');
+            const filtered = currentFilter === 'all' 
+                ? allJobs 
+                : allJobs.filter(j => {
+                    if (currentFilter === 'new') return j.status.toLowerCase() === 'new' || j.file_missing;
+                    if (currentFilter === 'tailored') return j.status.toLowerCase() === 'tailored' && !j.file_missing;
+                    return j.status.toLowerCase() === currentFilter;
+                });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-slate-400">
+                            <i class="fa-regular fa-folder-open text-3xl mb-2 block"></i>
+                            <p class="font-medium">No jobs matching current filter.</p>
+                            <p class="text-xs text-slate-400 mt-1">Click "Scan Indeed for Jobs" to discover new opportunities.</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(j => {
+                const isApplied = j.status.toLowerCase() === 'applied';
+                const isSkipped = j.status.toLowerCase() === 'skipped';
+                const isMissing = j.file_missing;
+                const isTailored = j.status.toLowerCase() === 'tailored' && !isMissing;
+                const isNew = j.status.toLowerCase() === 'new';
+
+                let badgeHtml = '';
+                if (isMissing) {
+                    badgeHtml = `<span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 w-max">
+                        <i class="fa-solid fa-triangle-exclamation text-[10px] text-amber-600"></i> Missing File
+                    </span>`;
+                } else if (isTailored) {
+                    badgeHtml = `<span class="px-2.5 py-1 rounded-full text-xs font-semibold uppercase badge-tailored">Ready</span>`;
+                } else if (isApplied) {
+                    badgeHtml = `<span class="px-2.5 py-1 rounded-full text-xs font-semibold uppercase badge-applied">Applied</span>`;
+                } else if (isSkipped) {
+                    badgeHtml = `<span class="px-2.5 py-1 rounded-full text-xs font-semibold uppercase badge-skipped">Skipped</span>`;
+                } else {
+                    badgeHtml = `<span class="px-2.5 py-1 rounded-full text-xs font-semibold uppercase badge-new">New</span>`;
+                }
+
+                // Tailor / Regenerate button
+                let tailorBtnHtml = '';
+                if (!isApplied) {
+                    if (isMissing) {
+                        tailorBtnHtml = `
+                            <button onclick="confirmTailor(${j.id}, 'missing')" title="Resume file missing from output folder. Click to regenerate with AI!" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all">
+                                <i class="fa-solid fa-arrows-rotate"></i> Regenerate
+                            </button>
+                        `;
+                    } else if (isTailored) {
+                        tailorBtnHtml = `
+                            <button onclick="confirmTailor(${j.id}, 'exists')" title="Regenerate resume with AI" class="p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition-colors">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            </button>
+                        `;
+                    } else {
+                        tailorBtnHtml = `
+                            <button onclick="confirmTailor(${j.id}, 'new')" title="Tailor resume with AI" class="p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg transition-colors">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            </button>
+                        `;
+                    }
+                }
+
+                // Word button
+                let wordBtnHtml = '';
+                if (j.resume_exists) {
+                    wordBtnHtml = `
+                        <button onclick="openResumeFile(${j.id})" title="Open Word Resume (.docx)" class="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors">
+                            <i class="fa-solid fa-file-word"></i>
+                        </button>
+                    `;
+                } else if (isMissing) {
+                    wordBtnHtml = `
+                        <button onclick="openResumeFile(${j.id})" title="Resume deleted from folder. Click to regenerate." class="p-2 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors">
+                            <i class="fa-solid fa-file-circle-exclamation"></i>
+                        </button>
+                    `;
+                }
+
+                // Apply button
+                let applyBtnHtml = '';
+                if (isTailored && j.resume_exists) {
+                    applyBtnHtml = `
+                        <button onclick="triggerApply(${j.id})" title="Apply with Guided Browser" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm inline-flex items-center gap-1.5 transition-all">
+                            <i class="fa-solid fa-paper-plane"></i> Apply
+                        </button>
+                    `;
+                } else if (isMissing) {
+                    applyBtnHtml = `
+                        <button onclick="confirmTailor(${j.id}, 'missing')" title="Cannot apply: resume was deleted. Click to regenerate." class="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-50 text-slate-500 hover:text-amber-800 border border-dashed border-slate-300 rounded-lg text-xs font-semibold shadow-sm inline-flex items-center gap-1.5 transition-all">
+                            <i class="fa-solid fa-file-pen text-amber-600"></i> Needs Resume
+                        </button>
+                    `;
+                }
+
+                return `
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="px-6 py-4 font-mono text-xs text-slate-400">#${j.id}</td>
+                        <td class="px-6 py-4">
+                            <div class="font-semibold text-slate-900">${escapeHtml(j.title)}</div>
+                            <div class="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
+                                ${j.is_easy_apply ? '<span class="text-emerald-600 font-medium flex items-center gap-1"><i class="fa-solid fa-bolt text-[10px]"></i> Easily Apply</span> &bull;' : ''}
+                                <span>${escapeHtml(j.salary || 'Salary not listed')}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="font-medium text-slate-700">${escapeHtml(j.company || 'Unknown')}</div>
+                            <div class="text-xs text-slate-400">${escapeHtml(j.location || 'Remote')}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            ${badgeHtml}
+                        </td>
+                        <td class="px-6 py-4 text-right space-x-1">
+                            <!-- View / Preview Details -->
+                            <button onclick="viewJobDetails(${j.id})" title="View Job & Tailor Details" class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors">
+                                <i class="fa-regular fa-eye"></i>
+                            </button>
+
+                            <!-- Tailor / Regenerate -->
+                            ${tailorBtnHtml}
+
+                            <!-- Open Word Resume -->
+                            ${wordBtnHtml}
+
+                            <!-- Apply Guided -->
+                            ${applyBtnHtml}
+
+                            <!-- Open on Indeed -->
+                            <a href="${j.job_url}" target="_blank" title="Open Job on Indeed" class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg inline-block transition-colors">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                            </a>
+
+                            <!-- Skip -->
+                            ${!isApplied ? `
+                                <button onclick="skipJob(${j.id})" title="Skip / Archive" class="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors">
+                                    <i class="fa-solid fa-ban"></i>
+                                </button>
+                            ` : ''}
+
+                            <!-- Delete Job -->
+                            <button onclick="deleteJob(${j.id})" title="Delete job permanently" class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                <i class="fa-regular fa-trash-can"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        async function handleLiveSearch(e) {
+            if (e) e.preventDefault();
+            const query = (document.getElementById('live_query').value || '').trim();
+            const location = (document.getElementById('live_location').value || '').trim();
+            const clearExisting = document.getElementById('chk_clear_on_search').checked;
+
+            if (!query) {
+                alert("Please enter a job search title or keywords.");
+                return;
+            }
+
+            document.getElementById('currentSearchDisplay').innerText = `Active: ${query} • ${location || 'anywhere'}`;
+            setTaskBanner(true, `Scanning Indeed for "${query}" in "${location || 'any'}"...`);
+
+            try {
+                const res = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: query,
+                        location: location,
+                        clear_existing: clearExisting
+                    })
+                });
+                pollTaskStatus();
+            } catch (err) {
+                alert("Search error: " + err);
+                setTaskBanner(false);
+            }
+        }
+
+        async function deleteJob(jobId) {
+            if (confirm(`Delete Job #${jobId} permanently from the queue?`)) {
+                await fetch(`/api/delete_job/${jobId}`, { method: 'POST' });
+                loadJobs();
+            }
+        }
+
+        async function confirmClearAll() {
+            if (confirm("Are you sure you want to clear all jobs from the queue?\n\nThis will wipe the current table so you can start a completely fresh search with your new query.")) {
+                await fetch('/api/clear_all_jobs', { method: 'POST' });
+                loadJobs();
+            }
+        }
+
+        function confirmTailor(jobId, state) {
+            const job = allJobs.find(j => j.id === jobId);
+            const title = job ? job.title : `Job #${jobId}`;
+            const company = job ? job.company : '';
+
+            if (state === 'missing') {
+                if (confirm(`The tailored resume file for "${title}" at "${company}" is missing from the output folder.\n\nWould you like to regenerate it with AI now?`)) {
+                    triggerTailorSingle(jobId);
+                }
+            } else if (state === 'exists') {
+                if (confirm(`A tailored resume already exists on disk for "${title}".\n\nDo you want to regenerate and overwrite it with AI?`)) {
+                    triggerTailorSingle(jobId);
+                }
+            } else {
+                triggerTailorSingle(jobId);
+            }
+        }
+
+        // Actions
+        async function triggerScan() {
+            setTaskBanner(true, "Scanning Indeed for remote customer service jobs...");
+            try {
+                const res = await fetch('/api/scan', { method: 'POST' });
+                const data = await res.json();
+                pollTaskStatus();
+            } catch (err) {
+                alert("Scan failed: " + err);
+                setTaskBanner(false);
+            }
+        }
+
+        async function triggerTailorAll() {
+            const missing = globalStats.missing || 0;
+            const newJobs = globalStats.new || 0;
+            const totalToProcess = missing + newJobs;
+
+            if (totalToProcess === 0) {
+                alert("All jobs already have resumes present on disk! There are no new or missing resumes to generate.");
+                return;
+            }
+
+            let msg = `Ready to tailor resumes with AI:`;
+            if (newJobs > 0) msg += `\n• ${newJobs} new job(s)`;
+            if (missing > 0) msg += `\n• ${missing} job(s) whose resume file was deleted from disk`;
+            msg += `\n\nWould you like to generate all ${totalToProcess} resume(s)?`;
+
+            if (confirm(msg)) {
+                setTaskBanner(true, `Tailoring ${totalToProcess} resume(s) with OpenRouter AI...`);
+                try {
+                    await fetch('/api/tailor_all', { 
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ include_missing: true })
+                    });
+                    pollTaskStatus();
+                } catch (err) {
+                    alert("Tailor failed: " + err);
+                    setTaskBanner(false);
+                }
+            }
+        }
+
+        async function triggerTailorSingle(jobId) {
+            setTaskBanner(true, `Optimizing resume for Job #${jobId}...`);
+            try {
+                await fetch(`/api/tailor/${jobId}`, { method: 'POST' });
+                pollTaskStatus();
+            } catch (err) {
+                alert("Tailor failed: " + err);
+                setTaskBanner(false);
+            }
+        }
+
+        async function triggerApply(jobId) {
+            const job = allJobs.find(j => j.id === jobId);
+            if (job && job.file_missing) {
+                if (confirm(`Cannot apply yet: the tailored resume file is missing from your computer.\n\nWould you like to regenerate it now?`)) {
+                    triggerTailorSingle(jobId);
+                }
+                return;
+            }
+
+            setTaskBanner(true, `Launching Guided Applier for Job #${jobId} (check your screen)...`);
+            try {
+                await fetch(`/api/apply/${jobId}`, { method: 'POST' });
+                pollTaskStatus();
+            } catch (err) {
+                alert("Apply error: " + err);
+                setTaskBanner(false);
+            }
+        }
+
+        async function skipJob(jobId) {
+            await fetch(`/api/skip/${jobId}`, { method: 'POST' });
+            loadJobs();
+        }
+
+        async function openResumeFile(jobId) {
+            const res = await fetch(`/api/open_file/${jobId}`, { method: 'POST' });
+            if (!res.ok) {
+                const data = await res.json();
+                if (data.error === 'file_missing') {
+                    if (confirm(`The resume file was deleted from your output folder.\n\nWould you like to regenerate it with AI right now?`)) {
+                        triggerTailorSingle(jobId);
+                    }
+                } else {
+                    alert(data.message || "Could not open resume file.");
+                }
+            }
+        }
+
+        async function triggerIndeedLogin() {
+            setTaskBanner(true, "Opening browser for Indeed sign-in...");
+            await fetch('/api/login', { method: 'POST' });
+            pollTaskStatus();
+        }
+
+        function setTaskBanner(show, text = "") {
+            const banner = document.getElementById('taskBanner');
+            const bannerText = document.getElementById('taskBannerText');
+            if (show) {
+                bannerText.innerText = text;
+                banner.classList.remove('hidden');
+                isTaskRunning = true;
+            } else {
+                banner.classList.add('hidden');
+                isTaskRunning = false;
+            }
+        }
+
+        async function pollTaskStatus() {
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch('/api/task_status');
+                    const data = await res.json();
+                    if (!data.running) {
+                        clearInterval(interval);
+                        setTaskBanner(false);
+                        loadJobs();
+                    } else {
+                        document.getElementById('taskBannerText').innerText = data.current_task || "Working...";
+                    }
+                } catch (e) {
+                    clearInterval(interval);
+                    setTaskBanner(false);
+                }
+            }, 2000);
+        }
+
+        // Details Modal
+        function viewJobDetails(jobId) {
+            const job = allJobs.find(j => j.id === jobId);
+            if (!job) return;
+            currentViewingJobId = jobId;
+
+            document.getElementById('modalJobTitle').innerText = job.title;
+            document.getElementById('modalCompany').innerText = `${job.company} • ${job.location || 'Remote'}`;
+            document.getElementById('modalJobDesc').innerText = job.job_description || 'No description available.';
+            
+            const badge = document.getElementById('modalJobBadge');
+            badge.innerText = job.status.toUpperCase();
+            badge.className = `px-2.5 py-0.5 rounded-full text-xs font-semibold badge-${job.status.toLowerCase()}`;
+
+            const notesCont = document.getElementById('modalTailorNotesContainer');
+            if (job.tailor_notes) {
+                notesCont.classList.remove('hidden');
+                document.getElementById('modalTailorNotes').innerText = job.tailor_notes;
+            } else {
+                notesCont.classList.add('hidden');
+            }
+
+            const sumCont = document.getElementById('modalSummaryContainer');
+            if (job.tailored_summary) {
+                sumCont.classList.remove('hidden');
+                document.getElementById('modalSummary').innerText = job.tailored_summary;
+            } else {
+                sumCont.classList.add('hidden');
+            }
+
+            const wordBtn = document.getElementById('modalOpenWordBtn');
+            if (job.tailored_resume_path) {
+                wordBtn.classList.remove('hidden');
+            } else {
+                wordBtn.classList.add('hidden');
+            }
+
+            document.getElementById('detailsModal').classList.remove('hidden');
+        }
+
+        function closeDetailsModal() {
+            document.getElementById('detailsModal').classList.add('hidden');
+        }
+
+        // Settings Modal
+        async function openSettingsModal() {
+            try {
+                const res = await fetch('/api/settings');
+                const s = await res.json();
+                document.getElementById('cfg_api_key').value = s.openrouter_api_key || '';
+                document.getElementById('cfg_model').value = s.openrouter_model || 'google/gemini-2.5-flash';
+                document.getElementById('cfg_browser').value = s.browser_type || 'firefox';
+                document.getElementById('cfg_query').value = s.job_search_query || 'remote customer service';
+                document.getElementById('cfg_loc').value = s.job_location || 'remote';
+                document.getElementById('cfg_name').value = s.user_full_name || '';
+                document.getElementById('cfg_email').value = s.user_email || '';
+                document.getElementById('cfg_phone').value = s.user_phone || '';
+                document.getElementById('cfg_exp').value = s.user_exp_years || 5;
+                document.getElementById('settingsModal').classList.remove('hidden');
+            } catch (err) {
+                alert("Failed to load settings: " + err);
+            }
+        }
+
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        async function openDefaultBrowserLogin() {
+            await fetch('/api/login_default_browser', { method: 'POST' });
+        }
+
+        async function saveSettings(e) {
+            e.preventDefault();
+            const payload = {
+                openrouter_api_key: document.getElementById('cfg_api_key').value.trim(),
+                openrouter_model: document.getElementById('cfg_model').value.trim(),
+                browser_type: document.getElementById('cfg_browser').value,
+                job_search_query: document.getElementById('cfg_query').value.trim(),
+                job_location: document.getElementById('cfg_loc').value.trim(),
+                user_full_name: document.getElementById('cfg_name').value.trim(),
+                user_email: document.getElementById('cfg_email').value.trim(),
+                user_phone: document.getElementById('cfg_phone').value.trim(),
+                user_exp_years: document.getElementById('cfg_exp').value.trim()
+            };
+
+            const res = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                closeSettingsModal();
+                document.getElementById('live_query').value = payload.job_search_query;
+                document.getElementById('live_location').value = payload.job_location;
+                document.getElementById('currentSearchDisplay').innerText = `Active: ${payload.job_search_query} • ${payload.job_location || 'anywhere'}`;
+                alert("Settings saved successfully! You can now click 'Search Indeed' to fetch jobs matching your new query.");
+            } else {
+                alert("Error saving settings.");
+            }
+        }
+
+        // Initial Load
+        loadJobs();
+    </script>
+</body>
+</html>
